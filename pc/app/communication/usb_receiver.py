@@ -1,5 +1,3 @@
-import re
-
 import serial
 from serial.tools import list_ports
 
@@ -38,28 +36,29 @@ class UsbReceiver:
     def _parse_solar_text(self, data: bytes):
         self.text_buffer += data
 
-        if b'\n' not in self.text_buffer:
-            # Keep the buffer bounded while waiting for a complete line.
-            self.text_buffer = self.text_buffer[-4096:]
-            return
+        while True:
+            start = self.text_buffer.find(b'SOLAR,')
+            if start < 0:
+                self.text_buffer = self.text_buffer[-6:]
+                return
 
-        complete, self.text_buffer = self.text_buffer.rsplit(b'\n', 1)
-        text = complete.decode('utf-8', errors='ignore')
+            end = self.text_buffer.find(b'\n', start)
+            if end < 0:
+                self.text_buffer = self.text_buffer[start:][-128:]
+                return
 
-        raw_match = re.findall(
-            r'Raw ADC \(avg\)\s*:\s*([-+]?\d+(?:\.\d+)?)',
-            text,
-        )
-        voltage_match = re.findall(
-            r'Solar Voltage\s*:\s*([-+]?\d+(?:\.\d+)?)\s*V',
-            text,
-        )
+            line = self.text_buffer[start:end].decode('ascii', errors='ignore')
+            self.text_buffer = self.text_buffer[end + 1:]
 
-        if raw_match:
-            self._solar_raw = float(raw_match[-1])
+            parts = line.strip().split(',')
+            if len(parts) != 3 or parts[0] != 'SOLAR':
+                continue
 
-        if voltage_match:
-            self._solar_voltage = float(voltage_match[-1])
+            try:
+                self._solar_raw = float(parts[1])
+                self._solar_voltage = float(parts[2])
+            except ValueError:
+                continue
 
     def solar_data(self):
         if self._solar_raw is None and self._solar_voltage is None:
@@ -81,5 +80,4 @@ class UsbReceiver:
             self._parse_solar_text(data)
 
         frames, self.buffer = parse_binary_frames(self.buffer)
-        # Latest-frame-only keeps the UI live if the PC briefly falls behind.
         return frames[-1:] if frames else []
