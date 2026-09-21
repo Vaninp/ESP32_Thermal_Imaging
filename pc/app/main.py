@@ -63,11 +63,6 @@ class ThermalWindow(QMainWindow):
         port_row.addWidget(self.port_combo, 1)
         port_row.addWidget(self.refresh_button)
         connection_form.addRow('USB port:', port_row)
-
-        self.baud_combo = QComboBox()
-        self.baud_combo.addItems(['921600', '115200'])
-        self.baud_combo.setCurrentText('921600')
-        connection_form.addRow('USB baud:', self.baud_combo)
         connection_form.addRow(self.usb_button)
 
         self.host_edit = QLineEdit('192.168.4.1')
@@ -151,10 +146,9 @@ class ThermalWindow(QMainWindow):
             return
         try:
             self.disconnect_all()
-            baud = int(self.baud_combo.currentText())
-            self.usb.connect(port, baud=baud)
+            self.usb.connect(port, baud=921600)
             self.active = self.usb
-            self.status_label.setText(f'USB: {port} @ {baud}')
+            self.status_label.setText(f'USB: {port} @ 921600')
         except Exception as exc:
             self.status_label.setText(f'USB error: {exc}')
 
