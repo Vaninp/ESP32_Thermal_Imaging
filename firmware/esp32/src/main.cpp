@@ -1,6 +1,7 @@
 #include <Arduino.h>
 
 #include "camera.h"
+#include "solar_voltage.h"
 #include "system_config.h"
 #include "usb_transport.h"
 #include "wifi_transport.h"
@@ -9,6 +10,8 @@ namespace {
 
 UsbTransport usbTransport;
 WifiTransport wifiTransport;
+SolarVoltageSensor solarVoltageSensor;
+uint32_t lastSolarSend = 0;
 
 } // namespace
 
@@ -16,6 +19,8 @@ void setup()
 {
     usbTransport.begin();
     delay(500);
+
+    solarVoltageSensor.begin();
 
     if (!camera.begin()) {
         Serial.println("[SYSTEM][FATAL] MLX90640 initialization failed.");
@@ -43,13 +48,24 @@ void loop()
     if (camera.update()) {
         const ThermalFrame &frame = camera.getFrame();
 
-        // Keep both transports on the same raw binary frame. No image
-        // interpolation or color processing is performed on the ESP32.
+        // Keep both transports on the same raw binary thermal frame.
         usbTransport.sendFrame(frame);
         wifiTransport.sendFrame(frame);
     }
 
-    // The sensor controls the frame cadence. Avoid adding an arbitrary
-    // delay here because it only increases end-to-end latency.
+    // Send the solar reading once per second over the same USB serial
+    // connection used by the thermal application.
+    if (millis() - lastSolarSend >= 1000) {
+        const SolarVoltageReading solar = solarVoltageSensor.read();
+
+        Serial.printf(
+            "SOLAR,%.1f,%.2f\n",
+            solar.rawAdc,
+            solar.voltage
+        );
+
+        lastSolarSend = millis();
+    }
+
     (void)captureStart;
 }
