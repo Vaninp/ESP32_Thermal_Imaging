@@ -63,6 +63,11 @@ class ThermalWindow(QMainWindow):
         port_row.addWidget(self.port_combo, 1)
         port_row.addWidget(self.refresh_button)
         connection_form.addRow('USB port:', port_row)
+
+        self.baud_combo = QComboBox()
+        self.baud_combo.addItems(['921600', '115200'])
+        self.baud_combo.setCurrentText('921600')
+        connection_form.addRow('USB baud:', self.baud_combo)
         connection_form.addRow(self.usb_button)
 
         self.host_edit = QLineEdit('192.168.4.1')
@@ -100,6 +105,18 @@ class ThermalWindow(QMainWindow):
             stats.addWidget(widget, row, 1)
 
         panel.addWidget(stats_box)
+
+        solar_box = QGroupBox('Solar Panel Data')
+        solar_stats = QGridLayout(solar_box)
+        self.solar_raw_label = QLabel('-')
+        self.solar_voltage_label = QLabel('-')
+
+        solar_stats.addWidget(QLabel('Raw ADC (avg):'), 0, 0)
+        solar_stats.addWidget(self.solar_raw_label, 0, 1)
+        solar_stats.addWidget(QLabel('Solar Voltage:'), 1, 0)
+        solar_stats.addWidget(self.solar_voltage_label, 1, 1)
+
+        panel.addWidget(solar_box)
         panel.addStretch()
 
         self.refresh_ports()
@@ -124,6 +141,8 @@ class ThermalWindow(QMainWindow):
         self.last_frame_number = None
         self.fps_frames = 0
         self.last_fps_time = time.monotonic()
+        self.solar_raw_label.setText('-')
+        self.solar_voltage_label.setText('-')
 
     def connect_usb(self):
         port = self.port_combo.currentText()
@@ -132,9 +151,10 @@ class ThermalWindow(QMainWindow):
             return
         try:
             self.disconnect_all()
-            self.usb.connect(port)
+            baud = int(self.baud_combo.currentText())
+            self.usb.connect(port, baud=baud)
             self.active = self.usb
-            self.status_label.setText(f'USB: {port}')
+            self.status_label.setText(f'USB: {port} @ {baud}')
         except Exception as exc:
             self.status_label.setText(f'USB error: {exc}')
 
@@ -157,6 +177,14 @@ class ThermalWindow(QMainWindow):
             self.status_label.setText(f'Connection error: {exc}')
             self.disconnect_all()
             return
+
+        if self.active is self.usb:
+            solar = self.usb.solar_data()
+            if solar is not None:
+                if solar['raw'] is not None:
+                    self.solar_raw_label.setText(f"{solar['raw']:.1f}")
+                if solar['voltage'] is not None:
+                    self.solar_voltage_label.setText(f"{solar['voltage']:.2f} V")
 
         for frame in frames:
             self.handle_frame(frame)
